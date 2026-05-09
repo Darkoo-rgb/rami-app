@@ -1,0 +1,93 @@
+.sectionTitle {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 2px; margin: 20px 0 12px;
+}
+
+/* ── DAY PICKER ── */
+.dayPicker { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.dayPicker::-webkit-scrollbar { display: none; }
+.dayBtn {
+  flex-shrink: 0; width: 58px; padding: 10px 6px;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text); text-align: center; transition: .2s;
+}
+.dayBtn:hover { border-color: #3a3a3a; }
+.dayActive { background: var(--gold) !important; border-color: var(--gold) !important; color: #000 !important; }
+.dNum { font-size: 20px; font-weight: 700; }
+.dName { font-size: 11px; color: var(--muted); }
+.dayActive .dName { color: #000 !important; }
+
+/* ── STATS ── */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+.statCard {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px; text-align: center;
+}
+.statNum { font-size: 36px; font-weight: 900; color: var(--gold); }
+.statLabel { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ── LIST ── */
+.list { display: flex; flex-direction: column; gap: 10px; }
+.empty { color: var(--muted); font-size: 14px; text-align: center; padding: 24px; }
+
+.bookingItem {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.blockedItem { border-color: var(--red); opacity: .7; }
+
+.bTime { font-size: 18px; font-weight: 900; color: var(--gold); min-width: 50px; }
+.bInfo { flex: 1; }
+.bName { font-size: 15px; font-weight: 700; }
+.bSvc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.bActions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+/* Status badges */
+.badge { padding: 4px 10px; border-radius: 50px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.stPending   { background: #1a1600; color: var(--gold);  border: 1px solid var(--gold); }
+.stConfirmed { background: #0d2e1e; color: var(--green); border: 1px solid var(--green); }
+.stDone      { background: #1a1a1a; color: var(--muted); border: 1px solid var(--border); }
+.stCancelled { background: #1a0000; color: var(--red);   border: 1px solid var(--red); }
+
+.actionBtns { display: flex; gap: 6px; }
+.confirmBtn {
+  padding: 5px 10px; border-radius: 8px; border: 1px solid var(--green);
+  background: #0d2e1e; color: var(--green); font-size: 12px; font-weight: 700;
+}
+.confirmBtn:hover { background: var(--green); color: #000; }
+.cancelBtn {
+  padding: 5px 10px; border-radius: 8px; border: 1px solid var(--red);
+  background: #1a0000; color: var(--red); font-size: 12px; font-weight: 700;
+}
+.cancelBtn:hover { background: var(--red); color: #fff; }
+.doneBtn {
+  padding: 5px 10px; border-radius: 8px; border: 1px solid var(--muted);
+  background: transparent; color: var(--muted); font-size: 12px;
+}
+.doneBtn:hover { color: var(--text); border-color: var(--text); }
+
+/* ── BLOCK FORM ── */
+.blockForm {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.timeRow { display: flex; gap: 10px; }
+.timeField { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.timeField label { font-size: 12px; color: var(--muted); }
+.inp {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px;
+  color: var(--text); font-size: 14px; font-family: var(--font);
+  width: 100%;
+}
+.inp:focus { outline: none; border-color: var(--gold); }
+.inp::placeholder { color: var(--muted); }
+.blockBtn {
+  padding: 12px; border-radius: 10px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); font-size: 14px; font-weight: 700;
+  transition: .2s;
+}
+.blockBtn:hover { border-color: var(--gold); color: var(--gold); }

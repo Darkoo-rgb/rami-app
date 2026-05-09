@@ -1,0 +1,31 @@
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:      #0d0d0d;
+  --card:    #1e1e1e;
+  --border:  #2a2a2a;
+  --gold:    #c9a84c;
+  --gold2:   #e8c96a;
+  --text:    #f0ede6;
+  --muted:   #888;
+  --green:   #2d9e6b;
+  --red:     #c0392b;
+  --radius:  14px;
+  --font:    'Cairo', sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  direction: rtl;
+}
+
+button { cursor: pointer; font-family: var(--font); }
+input, textarea { font-family: var(--font); }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
