@@ -10,7 +10,6 @@ function toDateStr(d) {
 const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 const STATUS_LABEL = { pending: 'انتظار', confirmed: 'مؤكد', done: 'تم', cancelled: 'ملغي' };
 const STATUS_CLASS = { pending: s.stPending, confirmed: s.stConfirmed, done: s.stDone, cancelled: s.stCancelled };
-
 const VIP_PHONE = '01286867382';
 
 export default function Dashboard() {
@@ -25,15 +24,17 @@ export default function Dashboard() {
   const [blockForm, setBlockForm] = useState({ start_time: '14:00', end_time: '15:00', reason: '' });
   const [loading, setLoading] = useState(false);
 
-  const [services, setServices] = useState([]);
   const [editingSvc, setEditingSvc] = useState(null);
   const [svcSaving, setSvcSaving] = useState(null);
   const [svcSuccess, setSvcSuccess] = useState(null);
 
-  const prevBookingIds = useRef(new Set());
+  // تتبع الإشعارات المرسلة
+  const notifiedNew = useRef(new Set());       // IDs اتبعتلها إشعار "جديد"
+  const notifiedReminder = useRef(new Set());  // IDs اتبعتلها إشعار "تذكير"
+  const isFirstLoad = useRef(true);
+
   const dateStr = toDateStr(selectedDate);
 
-  // طلب إذن الإشعارات
   useEffect(() => {
     if (auth && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
@@ -42,27 +43,55 @@ export default function Dashboard() {
 
   function sendNotification(title, body) {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '✂️' });
+      new Notification(title, { body });
     }
   }
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const [bRes, blRes] = await Promise.all([getBookings(dateStr), getBlocked(dateStr)]);
       const newBookings = bRes.data;
+      const now = new Date();
 
-      // تحقق من حجوزات جديدة
       newBookings.forEach(b => {
-        if (!prevBookingIds.current.has(b.id) && prevBookingIds.current.size > 0) {
-          const isVip = b.phone === VIP_PHONE;
+        const isVip = b.phone === VIP_PHONE;
+
+        // إشعار حجز جديد — مرة واحدة بس ومش في أول تحميل
+        if (!isFirstLoad.current && !notifiedNew.current.has(b.id)) {
+          notifiedNew.current.add(b.id);
           sendNotification(
-            isVip ? '⭐ حجز VIP جديد!' : '✂ حجز جديد!',
-            `${b.customer_name} — ${b.service_name} — ${b.slot_time?.slice(0,5)}${isVip ? ' 👑' : ''}`
+            isVip ? '👑 حجز VIP جديد!' : '✂ حجز جديد!',
+            `${b.customer_name} — ${b.service_name} — ${b.slot_time?.slice(0,5)}`
           );
         }
-        prevBookingIds.current.add(b.id);
+
+        // إشعار تذكير — pending لأكتر من ساعة — مرة واحدة بس
+        if (
+          b.status === 'pending' &&
+          !notifiedReminder.current.has(b.id)
+        ) {
+          const bookingCreatedAt = new Date(b.created_at);
+          const diffMinutes = (now - bookingCreatedAt) / 1000 / 60;
+          if (diffMinutes >= 60) {
+            notifiedReminder.current.add(b.id);
+            sendNotification(
+              '⏰ حجز لسه في الانتظار!',
+              `${b.customer_name} — ${b.service_name} — ${b.slot_time?.slice(0,5)} — من ساعة`
+            );
+          }
+        }
+
+        // لو اتأكد الحجز — مش بنبعت إشعار تاني
+        if (b.status === 'confirmed') {
+          notifiedReminder.current.add(b.id); // منعدش يبعت تذكير
+        }
       });
+
+      // بعد أول تحميل — سجّل كل الـ IDs الموجودة عشان مش يبعت إشعار عليها
+      if (isFirstLoad.current) {
+        newBookings.forEach(b => notifiedNew.current.add(b.id));
+        isFirstLoad.current = false;
+      }
 
       setBookings(newBookings);
       setBlocked(blRes.data);
@@ -73,16 +102,15 @@ export default function Dashboard() {
   const loadServices = useCallback(async () => {
     try {
       const res = await getServices();
-      setServices(res.data);
       setEditingSvc(res.data.map(s => ({ ...s })));
     } catch {}
   }, []);
 
   useEffect(() => {
-    if (auth) { load(); loadServices(); }
+    if (auth) { setLoading(true); load(); loadServices(); }
   }, [load, loadServices, auth]);
 
-  // polling كل 30 ثانية لاكتشاف حجوزات جديدة
+  // polling كل 30 ثانية
   useEffect(() => {
     if (!auth) return;
     const interval = setInterval(load, 30000);
@@ -91,6 +119,8 @@ export default function Dashboard() {
 
   async function handleStatus(id, status) {
     await updateBooking(id, status);
+    // لو اتأكد — منعدش يبعت تذكير عليه
+    if (status === 'confirmed') notifiedReminder.current.add(id);
     load();
   }
 
@@ -136,7 +166,6 @@ export default function Dashboard() {
     localStorage.removeItem('rami_auth');
   }
 
-  // ── شاشة تسجيل الدخول ──
   if (!auth) return (
     <div style={{ textAlign: 'center', marginTop: '80px' }}>
       <div style={{ fontSize: '48px', marginBottom: '16px' }}>✂</div>
@@ -165,7 +194,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={() => setActiveTab('bookings')} style={{ padding: '8px 16px', borderRadius: '50px', border: '1px solid var(--border)', background: activeTab === 'bookings' ? 'var(--gold)' : 'none', color: activeTab === 'bookings' ? '#000' : 'var(--muted)', fontFamily: 'var(--font)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
@@ -180,7 +208,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ══ TAB: المواعيد ══ */}
       {activeTab === 'bookings' && (
         <>
           <div className={s.sectionTitle}>اختار اليوم</div>
@@ -206,11 +233,11 @@ export default function Dashboard() {
                 {[...today].sort((a,b) => a.slot_time.localeCompare(b.slot_time)).map(b => {
                   const isVip = b.phone === VIP_PHONE;
                   return (
-                    <div key={b.id} className={s.bookingItem} style={{ border: isVip ? '1px solid #c9a84c' : undefined, background: isVip ? '#1a1600' : undefined }}>
+                    <div key={b.id} className={s.bookingItem} style={{ border: isVip ? '1px solid var(--gold)' : undefined, background: isVip ? '#1a1600' : undefined }}>
                       <div className={s.bTime}>{b.slot_time.slice(0,5)}</div>
                       <div className={s.bInfo}>
                         <div className={s.bName}>
-                          {isVip && <span style={{ color: 'var(--gold)', marginLeft: '6px' }}>👑 VIP</span>}
+                          {isVip && <span style={{ color: 'var(--gold)', marginLeft: '6px' }}>👑</span>}
                           {b.customer_name}
                         </div>
                         <div className={s.bSvc}>{b.service_name} · {b.phone}</div>
@@ -259,7 +286,6 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* ══ TAB: الخدمات ══ */}
       {activeTab === 'services' && (
         <>
           <div className={s.sectionTitle}>تعديل الخدمات والأسعار</div>
