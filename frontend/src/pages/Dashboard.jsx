@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getBookings, updateBooking, getBlocked, blockSlot, deleteBlock, getServices } from '../api';
 import axios from 'axios';
 import s from './Dashboard.module.css';
@@ -11,8 +11,10 @@ const DAYS_AR = ['الأحد','الاثنين','الثلاثاء','الأربع�
 const STATUS_LABEL = { pending: 'انتظار', confirmed: 'مؤكد', done: 'تم', cancelled: 'ملغي' };
 const STATUS_CLASS = { pending: s.stPending, confirmed: s.stConfirmed, done: s.stDone, cancelled: s.stCancelled };
 
+const VIP_PHONE = '01286867382';
+
 export default function Dashboard() {
-  const [auth, setAuth] = useState(false);
+  const [auth, setAuth] = useState(() => localStorage.getItem('rami_auth') === 'true');
   const [pass, setPass] = useState('');
   const [passError, setPassError] = useState(false);
   const [activeTab, setActiveTab] = useState('bookings');
@@ -25,16 +27,44 @@ export default function Dashboard() {
 
   const [services, setServices] = useState([]);
   const [editingSvc, setEditingSvc] = useState(null);
-  const [svcSaving, setSvcSaving] = useState(false);
+  const [svcSaving, setSvcSaving] = useState(null);
   const [svcSuccess, setSvcSuccess] = useState(null);
 
+  const prevBookingIds = useRef(new Set());
   const dateStr = toDateStr(selectedDate);
+
+  // طلب إذن الإشعارات
+  useEffect(() => {
+    if (auth && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [auth]);
+
+  function sendNotification(title, body) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '✂️' });
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [bRes, blRes] = await Promise.all([getBookings(dateStr), getBlocked(dateStr)]);
-      setBookings(bRes.data);
+      const newBookings = bRes.data;
+
+      // تحقق من حجوزات جديدة
+      newBookings.forEach(b => {
+        if (!prevBookingIds.current.has(b.id) && prevBookingIds.current.size > 0) {
+          const isVip = b.phone === VIP_PHONE;
+          sendNotification(
+            isVip ? '⭐ حجز VIP جديد!' : '✂ حجز جديد!',
+            `${b.customer_name} — ${b.service_name} — ${b.slot_time?.slice(0,5)}${isVip ? ' 👑' : ''}`
+          );
+        }
+        prevBookingIds.current.add(b.id);
+      });
+
+      setBookings(newBookings);
       setBlocked(blRes.data);
     } catch {}
     setLoading(false);
@@ -48,7 +78,16 @@ export default function Dashboard() {
     } catch {}
   }, []);
 
-  useEffect(() => { if (auth) { load(); loadServices(); } }, [load, loadServices, auth]);
+  useEffect(() => {
+    if (auth) { load(); loadServices(); }
+  }, [load, loadServices, auth]);
+
+  // polling كل 30 ثانية لاكتشاف حجوزات جديدة
+  useEffect(() => {
+    if (!auth) return;
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [auth, load]);
 
   async function handleStatus(id, status) {
     await updateBooking(id, status);
@@ -83,10 +122,21 @@ export default function Dashboard() {
   }
 
   function handleLogin() {
-    if (pass === 'rami1994') { setAuth(true); setPassError(false); }
-    else setPassError(true);
+    if (pass === 'rami1994') {
+      setAuth(true);
+      localStorage.setItem('rami_auth', 'true');
+      setPassError(false);
+    } else {
+      setPassError(true);
+    }
   }
 
+  function handleLogout() {
+    setAuth(false);
+    localStorage.removeItem('rami_auth');
+  }
+
+  // ── شاشة تسجيل الدخول ──
   if (!auth) return (
     <div style={{ textAlign: 'center', marginTop: '80px' }}>
       <div style={{ fontSize: '48px', marginBottom: '16px' }}>✂</div>
@@ -118,20 +168,14 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => setActiveTab('bookings')}
-            style={{ padding: '8px 16px', borderRadius: '50px', border: '1px solid var(--border)', background: activeTab === 'bookings' ? 'var(--gold)' : 'none', color: activeTab === 'bookings' ? '#000' : 'var(--muted)', fontFamily: 'var(--font)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-          >
+          <button onClick={() => setActiveTab('bookings')} style={{ padding: '8px 16px', borderRadius: '50px', border: '1px solid var(--border)', background: activeTab === 'bookings' ? 'var(--gold)' : 'none', color: activeTab === 'bookings' ? '#000' : 'var(--muted)', fontFamily: 'var(--font)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
             المواعيد
           </button>
-          <button
-            onClick={() => setActiveTab('services')}
-            style={{ padding: '8px 16px', borderRadius: '50px', border: '1px solid var(--border)', background: activeTab === 'services' ? 'var(--gold)' : 'none', color: activeTab === 'services' ? '#000' : 'var(--muted)', fontFamily: 'var(--font)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-          >
+          <button onClick={() => setActiveTab('services')} style={{ padding: '8px 16px', borderRadius: '50px', border: '1px solid var(--border)', background: activeTab === 'services' ? 'var(--gold)' : 'none', color: activeTab === 'services' ? '#000' : 'var(--muted)', fontFamily: 'var(--font)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
             الخدمات
           </button>
         </div>
-        <button onClick={() => setAuth(false)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+        <button onClick={handleLogout} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font)' }}>
           خروج
         </button>
       </div>
@@ -159,25 +203,31 @@ export default function Dashboard() {
             : today.length === 0 ? <p className={s.empty}>مفيش مواعيد النهارده</p>
             : (
               <div className={s.list}>
-                {[...today].sort((a,b) => a.slot_time.localeCompare(b.slot_time)).map(b => (
-                  <div key={b.id} className={s.bookingItem}>
-                    <div className={s.bTime}>{b.slot_time.slice(0,5)}</div>
-                    <div className={s.bInfo}>
-                      <div className={s.bName}>{b.customer_name}</div>
-                      <div className={s.bSvc}>{b.service_name} · {b.phone}</div>
-                    </div>
-                    <div className={s.bActions}>
-                      <span className={`${s.badge} ${STATUS_CLASS[b.status]}`}>{STATUS_LABEL[b.status]}</span>
-                      {b.status === 'pending' && (
-                        <div className={s.actionBtns}>
-                          <button className={s.confirmBtn} onClick={() => handleStatus(b.id, 'confirmed')}>✓ تأكيد</button>
-                          <button className={s.cancelBtn} onClick={() => handleStatus(b.id, 'cancelled')}>✕</button>
+                {[...today].sort((a,b) => a.slot_time.localeCompare(b.slot_time)).map(b => {
+                  const isVip = b.phone === VIP_PHONE;
+                  return (
+                    <div key={b.id} className={s.bookingItem} style={{ border: isVip ? '1px solid #c9a84c' : undefined, background: isVip ? '#1a1600' : undefined }}>
+                      <div className={s.bTime}>{b.slot_time.slice(0,5)}</div>
+                      <div className={s.bInfo}>
+                        <div className={s.bName}>
+                          {isVip && <span style={{ color: 'var(--gold)', marginLeft: '6px' }}>👑 VIP</span>}
+                          {b.customer_name}
                         </div>
-                      )}
-                      {b.status === 'confirmed' && <button className={s.doneBtn} onClick={() => handleStatus(b.id, 'done')}>تم ✓</button>}
+                        <div className={s.bSvc}>{b.service_name} · {b.phone}</div>
+                      </div>
+                      <div className={s.bActions}>
+                        <span className={`${s.badge} ${STATUS_CLASS[b.status]}`}>{STATUS_LABEL[b.status]}</span>
+                        {b.status === 'pending' && (
+                          <div className={s.actionBtns}>
+                            <button className={s.confirmBtn} onClick={() => handleStatus(b.id, 'confirmed')}>✓ تأكيد</button>
+                            <button className={s.cancelBtn} onClick={() => handleStatus(b.id, 'cancelled')}>✕</button>
+                          </div>
+                        )}
+                        {b.status === 'confirmed' && <button className={s.doneBtn} onClick={() => handleStatus(b.id, 'done')}>تم ✓</button>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
           }
@@ -221,40 +271,21 @@ export default function Dashboard() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
                     <div>
                       <label style={{ fontSize: '12px', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>الاسم بالعربي</label>
-                      <input
-                        className={s.inp}
-                        value={svc.name_ar}
-                        onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, name_ar: e.target.value } : x))}
-                      />
+                      <input className={s.inp} value={svc.name_ar} onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, name_ar: e.target.value } : x))} />
                     </div>
                     <div>
                       <label style={{ fontSize: '12px', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>السعر (جنيه)</label>
-                      <input
-                        className={s.inp}
-                        type="number"
-                        value={svc.price_egp}
-                        onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, price_egp: e.target.value } : x))}
-                      />
+                      <input className={s.inp} type="number" value={svc.price_egp} onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, price_egp: e.target.value } : x))} />
                     </div>
                     <div>
                       <label style={{ fontSize: '12px', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>المدة (دقيقة)</label>
-                      <input
-                        className={s.inp}
-                        type="number"
-                        value={svc.duration_min}
-                        onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, duration_min: e.target.value } : x))}
-                      />
+                      <input className={s.inp} type="number" value={svc.duration_min} onChange={e => setEditingSvc(prev => prev.map((x, j) => j === i ? { ...x, duration_min: e.target.value } : x))} />
                     </div>
                   </div>
                   <button
                     onClick={() => handleSaveService(svc)}
                     disabled={svcSaving === svc.id}
-                    style={{
-                      width: '100%', padding: '10px', borderRadius: '10px',
-                      background: svcSuccess === svc.id ? 'var(--green)' : 'var(--gold)',
-                      border: 'none', color: '#000', fontWeight: '700',
-                      fontFamily: 'var(--font)', fontSize: '14px', cursor: 'pointer'
-                    }}
+                    style={{ width: '100%', padding: '10px', borderRadius: '10px', background: svcSuccess === svc.id ? 'var(--green)' : 'var(--gold)', border: 'none', color: '#000', fontWeight: '700', fontFamily: 'var(--font)', fontSize: '14px', cursor: 'pointer' }}
                   >
                     {svcSaving === svc.id ? 'بنحفظ...' : svcSuccess === svc.id ? '✓ تم الحفظ!' : 'حفظ التعديلات'}
                   </button>

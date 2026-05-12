@@ -1,12 +1,13 @@
 const router = require('express').Router();
 const db = require('../db/pool');
 
-// GET /api/bookings?date=2024-05-08  — مواعيد يوم معين (داشبورد رامي)
+const VIP_PHONE = '01286867382';
+
+// GET /api/bookings?date=2024-05-08
 router.get('/', async (req, res) => {
   const { date } = req.query;
   const filter = date ? 'WHERE b.slot_date = $1' : '';
   const params = date ? [date] : [];
-
   try {
     const { rows } = await db.query(
       `SELECT b.id, b.slot_date, b.slot_time, b.status, b.notes,
@@ -32,6 +33,8 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'كل الحقول مطلوبة' });
   }
 
+  const isVip = phone === VIP_PHONE;
+
   try {
     // سجّل العميل لو مش موجود
     const custResult = await db.query(
@@ -43,19 +46,20 @@ router.post('/', async (req, res) => {
     );
     const customer_id = custResult.rows[0].id;
 
-    // تحقق إن السلوت لسه متاح
-    const conflict = await db.query(
-      `SELECT b.id FROM bookings b
-       JOIN services s ON s.id = b.service_id
-       WHERE b.slot_date = $1
-         AND b.status NOT IN ('cancelled')
-         AND b.slot_time < ($2::time + s.duration_min * interval '1 minute')
-         AND (b.slot_time + s.duration_min * interval '1 minute') > $2::time`,
-      [slot_date, slot_time]
-    );
-
-    if (conflict.rows.length > 0) {
-      return res.status(409).json({ error: 'الوقت ده اتحجز للتو، اختار وقت تاني' });
+    // VIP بيعدي على فحص التعارض
+    if (!isVip) {
+      const conflict = await db.query(
+        `SELECT b.id FROM bookings b
+         JOIN services s ON s.id = b.service_id
+         WHERE b.slot_date = $1
+           AND b.status NOT IN ('cancelled')
+           AND b.slot_time < ($2::time + s.duration_min * interval '1 minute')
+           AND (b.slot_time + s.duration_min * interval '1 minute') > $2::time`,
+        [slot_date, slot_time]
+      );
+      if (conflict.rows.length > 0) {
+        return res.status(409).json({ error: 'الوقت ده اتحجز للتو، اختار وقت تاني' });
+      }
     }
 
     const { rows } = await db.query(
@@ -65,20 +69,23 @@ router.post('/', async (req, res) => {
       [customer_id, service_id, slot_date, slot_time, notes]
     );
 
-    res.status(201).json({ booking_id: rows[0].id, status: rows[0].status });
+    res.status(201).json({
+      booking_id: rows[0].id,
+      status: rows[0].status,
+      vip: isVip
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PATCH /api/bookings/:id — تغيير status (رامي يأكد أو يلغي)
+// PATCH /api/bookings/:id
 router.patch('/:id', async (req, res) => {
   const { status } = req.body;
   const allowed = ['pending', 'confirmed', 'done', 'cancelled'];
   if (!allowed.includes(status)) {
     return res.status(400).json({ error: 'status مش صح' });
   }
-
   try {
     const { rows } = await db.query(
       'UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *',
@@ -91,13 +98,10 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/bookings/:id — إلغاء
+// DELETE /api/bookings/:id
 router.delete('/:id', async (req, res) => {
   try {
-    await db.query(
-      "UPDATE bookings SET status = 'cancelled' WHERE id = $1",
-      [req.params.id]
-    );
+    await db.query("UPDATE bookings SET status = 'cancelled' WHERE id = $1", [req.params.id]);
     res.json({ message: 'تم الإلغاء' });
   } catch (err) {
     res.status(500).json({ error: err.message });
